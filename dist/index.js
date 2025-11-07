@@ -31278,7 +31278,7 @@ async function authenticate(http) {
     const apiKey = coreExports.getInput('api-key');
     coreExports.info(`Authenticating @ ${url}`);
     return http
-        .postJson(`${url}/api/authenticate/api/json`, null, {
+        .postJson(`${url}/api/authentication/api/json`, null, {
         'API-KEY': apiKey,
         'content-type': 'application/json'
     })
