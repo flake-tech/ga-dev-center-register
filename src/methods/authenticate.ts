@@ -10,10 +10,14 @@ export async function authenticate(http: HttpClient) {
   core.info(`Authenticating @ ${url}`)
 
   return http
-    .postJson<{ access: string }>(`${url}/api/authentication/api/json`, '{}', {
-      'API-KEY': apiKey,
-      'content-type': 'application/json'
-    })
+    .postJson<{ access: string }>(
+      `${url}/api/authentication/api/json`,
+      {},
+      {
+        'API-KEY': apiKey,
+        'content-type': 'application/json'
+      }
+    )
     .then(parseHttpResult('authenticate'))
     .then((result) => {
       http.requestOptions = {

@@ -31,26 +31,20 @@ export async function run(): Promise<void> {
     await authenticate(http)
 
     const branch = await http
-      .postJson<BranchRead>(
-        `${url}/api/branch`,
-        JSON.stringify({
-          id: branchName,
-          repo
-        } satisfies BranchCreate)
-      )
+      .postJson<BranchRead>(`${url}/api/branch`, {
+        id: branchName,
+        repo
+      } satisfies BranchCreate)
       .then(parseHttpResult('register branch'))
     core.notice('Branch')
 
-    await http.post(
-      `${url}/api/commit`,
-      JSON.stringify({
-        id: commitRef,
-        branchId: branch.id,
-        name: commit.message.split('\n')[0],
-        description: commit.message,
-        author: commit.committer?.email
-      } satisfies CommitCreate)
-    )
+    await http.postJson(`${url}/api/commit`, {
+      id: commitRef,
+      branchId: branch.id,
+      name: commit.message.split('\n')[0],
+      description: commit.message,
+      author: commit.committer?.email
+    } satisfies CommitCreate)
 
     // Set outputs for other workflow steps to use
     core.setOutput('time', new Date().toTimeString())
