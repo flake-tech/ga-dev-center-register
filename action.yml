@@ -19,7 +19,6 @@ inputs:
     description: 'GitHub token for API access'
     default: ${{ github.token }}
 
-
 # Define your outputs here.
 #outputs:
 
