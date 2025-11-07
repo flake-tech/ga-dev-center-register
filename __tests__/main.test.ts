@@ -27,9 +27,12 @@ const mockGetCommit = jest.fn<
   }>
 >()
 const mockPostJson =
-  jest.fn<(url: string, data: string) => Promise<ifm.TypedResponse<unknown>>>()
-const mockPost =
-  jest.fn<(url: string, data: string) => Promise<ifm.TypedResponse<unknown>>>()
+  jest.fn<
+    (
+      url: string,
+      data: Record<string, unknown>
+    ) => Promise<ifm.TypedResponse<unknown>>
+  >()
 
 const mockAuthenticate = jest.fn<() => Promise<void>>()
 const mockParseHttpResult =
@@ -67,7 +70,6 @@ jest.unstable_mockModule('@actions/github', () => ({
 jest.unstable_mockModule('@actions/http-client', () => ({
   HttpClient: jest.fn(() => ({
     postJson: mockPostJson,
-    post: mockPost,
     requestOptions: {}
   }))
 }))
@@ -83,9 +85,13 @@ jest.unstable_mockModule('../src/methods/parse-http-result.js', () => ({
 const { run } = await import('../src/main.js')
 
 describe('main.ts - Dev Center Registration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Reset all mocks
     jest.clearAllMocks()
+
+    // Reset github context to default values
+    const github = await import('@actions/github')
+    github.context.ref = 'refs/heads/main'
 
     // Setup default input values
     mockGetInput.mockImplementation((name: string) => {
@@ -118,8 +124,15 @@ describe('main.ts - Dev Center Registration', () => {
       return (result: ifm.TypedResponse<unknown>) => result.result
     })
 
-    // Setup default branch creation response
+    // Setup default commit creation response
     mockPostJson.mockResolvedValue({
+      statusCode: 200,
+      headers: {},
+      result: undefined
+    })
+
+    // Setup default branch creation response
+    mockPostJson.mockResolvedValueOnce({
       statusCode: 200,
       headers: {},
       result: {
@@ -127,13 +140,6 @@ describe('main.ts - Dev Center Registration', () => {
         name: 'main',
         repo: 'test-owner/test-repo'
       }
-    })
-
-    // Setup default commit creation response
-    mockPost.mockResolvedValue({
-      statusCode: 200,
-      headers: {},
-      result: undefined
     })
   })
 
@@ -144,8 +150,7 @@ describe('main.ts - Dev Center Registration', () => {
       expect(mockAuthenticate).toHaveBeenCalledTimes(1)
       expect(mockAuthenticate).toHaveBeenCalledWith(
         expect.objectContaining({
-          postJson: mockPostJson,
-          post: mockPost
+          postJson: mockPostJson
         })
       )
     })
@@ -155,26 +160,26 @@ describe('main.ts - Dev Center Registration', () => {
 
       expect(mockPostJson).toHaveBeenCalledWith(
         'https://dev-center.flake.gg/api/branch',
-        JSON.stringify({
+        {
           id: 'main',
           repo: 'test-owner/test-repo'
-        })
+        }
       )
     })
 
     it('should register a commit with correct parameters', async () => {
       await run()
 
-      expect(mockPost).toHaveBeenCalledWith(
+      expect(mockPostJson).toHaveBeenCalledWith(
         'https://dev-center.flake.gg/api/commit',
-        JSON.stringify({
+        {
           id: 'abc123def456',
           branchId: 'main',
           name: 'feat: add new feature',
           description:
             'feat: add new feature\n\nDetailed description of the feature',
           author: 'test@example.com'
-        })
+        }
       )
     })
 
@@ -190,7 +195,7 @@ describe('main.ts - Dev Center Registration', () => {
     it('should output branch notice', async () => {
       await run()
 
-      expect(mockNotice).toHaveBeenCalledWith('Branch')
+      expect(mockNotice).toHaveBeenCalledWith('Branch Registered')
     })
 
     it('should handle branch names with refs prefix correctly', async () => {
@@ -201,7 +206,7 @@ describe('main.ts - Dev Center Registration', () => {
 
       expect(mockPostJson).toHaveBeenCalledWith(
         expect.any(String),
-        expect.stringContaining('"id":"feature/test-branch"')
+        expect.objectContaining({ id: 'feature/test-branch' })
       )
     })
 
@@ -220,9 +225,9 @@ describe('main.ts - Dev Center Registration', () => {
 
       await run()
 
-      expect(mockPost).toHaveBeenCalledWith(
+      expect(mockPostJson).toHaveBeenCalledWith(
         expect.any(String),
-        expect.stringContaining('"name":"fix: critical bug"')
+        expect.objectContaining({ name: 'fix: critical bug' })
       )
     })
   })
@@ -237,7 +242,10 @@ describe('main.ts - Dev Center Registration', () => {
     })
 
     it('should fail when branch registration fails', async () => {
-      mockPostJson.mockRejectedValue(new Error('Branch registration failed'))
+      mockPostJson.mockReset()
+      mockPostJson.mockRejectedValueOnce(
+        new Error('Branch registration failed')
+      )
 
       await run()
 
@@ -245,7 +253,21 @@ describe('main.ts - Dev Center Registration', () => {
     })
 
     it('should fail when commit registration fails', async () => {
-      mockPost.mockRejectedValue(new Error('Commit registration failed'))
+      mockPostJson.mockReset()
+      // First call (branch) succeeds
+      mockPostJson.mockResolvedValueOnce({
+        statusCode: 200,
+        headers: {},
+        result: {
+          id: 'main',
+          name: 'main',
+          repo: 'test-owner/test-repo'
+        }
+      })
+      // Second call (commit) fails
+      mockPostJson.mockRejectedValueOnce(
+        new Error('Commit registration failed')
+      )
 
       await run()
 
@@ -253,7 +275,7 @@ describe('main.ts - Dev Center Registration', () => {
     })
 
     it('should fail when GitHub API call fails', async () => {
-      mockGetCommit.mockRejectedValue(new Error('GitHub API error'))
+      mockGetCommit.mockRejectedValueOnce(new Error('GitHub API error'))
 
       await run()
 
@@ -261,7 +283,7 @@ describe('main.ts - Dev Center Registration', () => {
     })
 
     it('should handle errors gracefully and not throw', async () => {
-      mockAuthenticate.mockRejectedValue(new Error('Test error'))
+      mockAuthenticate.mockRejectedValueOnce(new Error('Test error'))
 
       await expect(run()).resolves.toBeUndefined()
       expect(mockSetFailed).toHaveBeenCalled()
@@ -279,13 +301,15 @@ describe('main.ts - Dev Center Registration', () => {
 
       await run()
 
-      expect(mockPostJson).toHaveBeenCalledWith(
+      expect(mockPostJson).toHaveBeenNthCalledWith(
+        1,
         'https://custom-dev-center.example.com/api/branch',
-        expect.any(String)
+        expect.objectContaining({ id: 'main' })
       )
-      expect(mockPost).toHaveBeenCalledWith(
+      expect(mockPostJson).toHaveBeenNthCalledWith(
+        2,
         'https://custom-dev-center.example.com/api/commit',
-        expect.any(String)
+        expect.objectContaining({ id: 'abc123def456' })
       )
     })
 
@@ -322,8 +346,9 @@ describe('main.ts - Dev Center Registration', () => {
       await run()
 
       // When committer is null, commit.committer?.email is undefined
-      const callArgs = mockPost.mock.calls[0]
-      const commitData = JSON.parse(callArgs[1])
+      // mockPostJson.mock.calls[0] is the branch call, [1] is the commit call
+      const callArgs = mockPostJson.mock.calls[1]
+      const commitData = callArgs[1]
       expect(commitData.author).toBeUndefined()
     })
   })

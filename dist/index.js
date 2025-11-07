@@ -31284,7 +31284,7 @@ async function authenticate(http) {
     const apiKey = coreExports.getInput('api-key');
     coreExports.info(`Authenticating @ ${url}`);
     return http
-        .postJson(`${url}/api/authentication/api/json`, '{}', {
+        .postJson(`${url}/api/authentication/api/json`, {}, {
         'API-KEY': apiKey,
         'content-type': 'application/json'
     })
@@ -31329,26 +31329,35 @@ async function run() {
         const http = new libExports.HttpClient(undefined, undefined);
         await authenticate(http);
         const branch = await http
-            .postJson(`${url}/api/branch`, JSON.stringify({
+            .postJson(`${url}/api/branch`, {
             id: branchName,
             repo
-        }))
+        })
             .then(parseHttpResult('register branch'));
-        coreExports.notice('Branch');
-        await http.post(`${url}/api/commit`, JSON.stringify({
+        coreExports.notice('Branch Registered');
+        await http
+            .postJson(`${url}/api/commit`, {
             id: commitRef,
             branchId: branch.id,
             name: commit.message.split('\n')[0],
             description: commit.message,
             author: commit.committer?.email
-        }));
+        })
+            .then(parseHttpResult('register commit'));
+        coreExports.notice('Commit Registered');
         // Set outputs for other workflow steps to use
         coreExports.setOutput('time', new Date().toTimeString());
     }
     catch (error) {
         // Fail the workflow run if an error occurs
-        if (error instanceof Error)
+        console.log(error);
+        if (error != null &&
+            typeof error === 'object' &&
+            'message' in error &&
+            typeof error.message === 'string')
             coreExports.setFailed(error.message);
+        else
+            coreExports.setFailed(error?.toString() ?? 'Unknown error');
     }
 }
 

@@ -36,20 +36,31 @@ export async function run(): Promise<void> {
         repo
       } satisfies BranchCreate)
       .then(parseHttpResult('register branch'))
-    core.notice('Branch')
+    core.notice('Branch Registered')
 
-    await http.postJson(`${url}/api/commit`, {
-      id: commitRef,
-      branchId: branch.id,
-      name: commit.message.split('\n')[0],
-      description: commit.message,
-      author: commit.committer?.email
-    } satisfies CommitCreate)
+    await http
+      .postJson(`${url}/api/commit`, {
+        id: commitRef,
+        branchId: branch.id,
+        name: commit.message.split('\n')[0],
+        description: commit.message,
+        author: commit.committer?.email
+      } satisfies CommitCreate)
+      .then(parseHttpResult('register commit'))
+    core.notice('Commit Registered')
 
     // Set outputs for other workflow steps to use
     core.setOutput('time', new Date().toTimeString())
   } catch (error) {
     // Fail the workflow run if an error occurs
-    if (error instanceof Error) core.setFailed(error.message)
+    console.log(error)
+    if (
+      error != null &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof error.message === 'string'
+    )
+      core.setFailed(error.message)
+    else core.setFailed(error?.toString() ?? 'Unknown error')
   }
 }
