@@ -31263,12 +31263,18 @@ var githubExports = requireGithub();
 
 var libExports = requireLib();
 
+class ApiError extends Error {
+    constructor(message) {
+        super(message);
+    }
+}
+
 function parseHttpResult(operation) {
     return (result) => {
         if (result.statusCode < 200 || result.statusCode >= 400)
-            throw new Error(`Failed to ${operation}: Error ${result.statusCode}`);
+            throw new ApiError(`Failed to ${operation}: Error ${result.statusCode}`);
         if (result.result == null)
-            throw new Error(`Expected result body but got while attempting to ${operation}`);
+            throw new ApiError(`Expected result body but got while attempting to ${operation}`);
         return result.result;
     };
 }
@@ -31278,7 +31284,7 @@ async function authenticate(http) {
     const apiKey = coreExports.getInput('api-key');
     coreExports.info(`Authenticating @ ${url}`);
     return http
-        .postJson(`${url}/api/authentication/api/json`, null, {
+        .postJson(`${url}/api/authentication/api/json`, '{}', {
         'API-KEY': apiKey,
         'content-type': 'application/json'
     })
@@ -31293,6 +31299,13 @@ async function authenticate(http) {
             }
         };
         coreExports.info('Authenticated!');
+    })
+        .catch((err) => {
+        if (err instanceof ApiError)
+            throw err;
+        coreExports.error('Error happened while authenticating!');
+        coreExports.debug(err);
+        throw new Error('');
     });
 }
 
