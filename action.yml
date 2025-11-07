@@ -9,15 +9,19 @@ branding:
 
 # Define your inputs here.
 inputs:
-  milliseconds:
-    description: Your input description here
+  url:
+    description: Dev Center URL to use
+    default: 'https://dev-center.flake.gg'
+  api-key:
+    description: Dev Center API key to use
     required: true
-    default: '1000'
+  github-token:
+    description: 'GitHub token for API access'
+    default: ${{ github.token }}
+
 
 # Define your outputs here.
-outputs:
-  time:
-    description: Your output description here
+#outputs:
 
 runs:
   using: node24

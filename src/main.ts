@@ -1,5 +1,10 @@
 import * as core from '@actions/core'
-import { wait } from './wait.js'
+import * as github from '@actions/github'
+import { HttpClient } from '@actions/http-client'
+import { authenticate } from './methods/authenticate.js'
+import { BranchCreate, BranchRead } from './types/branch.js'
+import { parseHttpResult } from './methods/parse-http-result.js'
+import { CommitCreate } from './types/commit.js'
 
 /**
  * The main function for the action.
@@ -8,15 +13,44 @@ import { wait } from './wait.js'
  */
 export async function run(): Promise<void> {
   try {
-    const ms: string = core.getInput('milliseconds')
+    const githubToken = core.getInput('github-token')
+    const octokit = github.getOctokit(githubToken)
+    const url = core.getInput('url')
+    const repo = `${github.context.repo.owner}/${github.context.repo.repo}`
+    const branchName = github.context.ref.replace('refs/heads/', '')
+    const commitRef = github.context.sha
+    const { commit } = (
+      await octokit.rest.repos.getCommit({
+        ...github.context.repo,
+        ref: github.context.sha
+      })
+    ).data
 
-    // Debug logs are only output if the `ACTIONS_STEP_DEBUG` secret is true
-    core.debug(`Waiting ${ms} milliseconds ...`)
+    const http = new HttpClient(undefined, undefined)
 
-    // Log the current timestamp, wait, then log the new timestamp
-    core.debug(new Date().toTimeString())
-    await wait(parseInt(ms, 10))
-    core.debug(new Date().toTimeString())
+    await authenticate(http)
+
+    const branch = await http
+      .postJson<BranchRead>(
+        `${url}/api/branch`,
+        JSON.stringify({
+          id: branchName,
+          repo
+        } satisfies BranchCreate)
+      )
+      .then(parseHttpResult('register branch'))
+    core.notice('Branch')
+
+    await http.post(
+      `${url}/api/commit`,
+      JSON.stringify({
+        id: commitRef,
+        branchId: branch.id,
+        name: commit.message.split('\n')[0],
+        description: commit.message,
+        author: commit.committer?.email
+      } satisfies CommitCreate)
+    )
 
     // Set outputs for other workflow steps to use
     core.setOutput('time', new Date().toTimeString())
